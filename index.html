@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sora動画プロンプト構築ツール Ver1</title>
+  <style>
+    :root{
+      --bg:#0f172a;--panel:#111827;--panel2:#1f2937;--text:#e5e7eb;--muted:#94a3b8;
+      --accent:#22c55e;--accent2:#38bdf8;--border:#334155;--warn:#f59e0b;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;background:linear-gradient(180deg,#020617,#111827);color:var(--text)}
+    .wrap{max-width:1100px;margin:0 auto;padding:24px}
+    .grid{display:grid;grid-template-columns:280px 1fr;gap:20px}
+    .card{background:rgba(17,24,39,.88);border:1px solid var(--border);border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.28)}
+    .side{position:sticky;top:16px;padding:18px;height:fit-content}
+    .main{padding:22px}
+    h1{font-size:28px;margin:0 0 8px}
+    h2{font-size:22px;margin:0 0 10px}
+    h3{font-size:16px;margin:18px 0 8px;color:#cbd5e1}
+    p{line-height:1.65;color:#dbe4ef}
+    .muted{color:var(--muted)}
+    .progressbar{height:10px;background:#0b1220;border-radius:999px;overflow:hidden;border:1px solid var(--border)}
+    .progressbar>div{height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent));width:0%}
+    .steps{margin-top:16px;display:grid;gap:8px}
+    .stepitem{padding:10px 12px;border:1px solid var(--border);border-radius:12px;color:var(--muted);background:#0b1220}
+    .stepitem.active{border-color:var(--accent2);color:#fff;background:#0f1a2d}
+    .stepitem.done{border-color:#14532d;color:#bbf7d0;background:#0d1d13}
+    .options{display:grid;gap:12px;margin-top:16px}
+    .option{border:1px solid var(--border);background:#0b1220;border-radius:14px;padding:14px;cursor:pointer;transition:.15s}
+    .option:hover{border-color:#64748b;transform:translateY(-1px)}
+    .option.selected{border-color:var(--accent2);background:#0f1a2d}
+    .label{font-weight:700;margin-bottom:6px}
+    .desc{font-size:14px;color:#cbd5e1;line-height:1.55}
+    .row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+    .row3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+    .field{margin-top:16px}
+    input[type="text"], textarea, select{width:100%;padding:12px 14px;background:#07101f;color:#fff;border:1px solid var(--border);border-radius:12px;font-size:15px}
+    textarea{min-height:140px;resize:vertical}
+    .inline{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .chip{padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:#0b1220;color:#cbd5e1;font-size:13px;cursor:pointer}
+    .chip.selected{border-color:var(--accent2);background:#0f1a2d;color:#fff}
+    .nav{display:flex;justify-content:space-between;gap:10px;margin-top:24px}
+    button{appearance:none;border:none;border-radius:12px;padding:12px 16px;font-weight:700;cursor:pointer}
+    .btn{background:#e2e8f0;color:#0f172a}
+    .btn.primary{background:linear-gradient(90deg,var(--accent2),var(--accent));color:#052e16}
+    .btn.ghost{background:#0b1220;color:#fff;border:1px solid var(--border)}
+    .summary{display:grid;gap:12px}
+    .summary .item{padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:#0b1220}
+    .pre{white-space:pre-wrap;background:#06101d;border:1px solid var(--border);border-radius:14px;padding:16px;line-height:1.7}
+    .small{font-size:13px;color:var(--muted)}
+    .badge{display:inline-block;padding:6px 10px;border-radius:999px;background:#1e293b;border:1px solid var(--border);font-size:12px;color:#cbd5e1}
+    .warn{color:#fcd34d}
+    @media (max-width: 900px){.grid{grid-template-columns:1fr}.side{position:relative;top:0}.row,.row3{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div style="margin-bottom:18px">
+    <div class="badge">GitHub Pages対応 / 単一HTML</div>
+    <h1>Sora動画プロンプト構築ツール Ver1</h1>
+    <p class="muted">選択式で動画の方向性を整理し、最後にサマリーとSora用プロンプトを生成します。まずはテスト運用向けです。</p>
+  </div>
+
+  <div class="grid">
+    <aside class="card side">
+      <div class="small">進捗</div>
+      <div style="margin:8px 0 10px;font-weight:700" id="progressText">Step 1 / 10</div>
+      <div class="progressbar"><div id="bar"></div></div>
+      <div class="steps" id="stepsList"></div>
+      <div style="margin-top:18px" class="small">保存方法</div>
+      <p class="small">このHTML単体で動きます。GitHub Pagesなら <code>index.html</code> をリポジトリに置けばOKです。</p>
+    </aside>
+
+    <main class="card main">
+      <div id="app"></div>
+      <div class="nav">
+        <button class="btn ghost" id="prevBtn">前に戻る</button>
+        <div class="inline">
+          <button class="btn ghost" id="resetBtn">最初から</button>
+          <button class="btn primary" id="nextBtn">次へ進む</button>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+const state = {
+  purpose:'', appeal:'', size:'', duration:'', mood:'', material:'',
+  flowMode:'', recommendedFlow:'', customDepth:'', customFlowText:'',
+  customMid:{start:'', middle:[], end:'', emphasis:''},
+  customLight:{focus:'', impression:'', ending:''},
+  textCount:3, textBlocks:[{text:'',style:''},{text:'',style:''},{text:'',style:''}],
+};
+
+const steps = [
+  {id:'purpose', label:'用途'},
+  {id:'appeal', label:'訴求内容'},
+  {id:'size', label:'サイズ'},
+  {id:'duration', label:'長さ'},
+  {id:'mood', label:'雰囲気'},
+  {id:'material', label:'素材'},
+  {id:'flow', label:'動画の流れ'},
+  {id:'texts', label:'文章入力'},
+  {id:'summary', label:'確認'},
+  {id:'output', label:'出力'}
+];
+let current = 0;
+
+const optionSets = {
+  purpose:[
+    ['店頭販促','短時間で内容を伝えたい時向け。視認性重視。'],
+    ['店内モニター','音なしでも伝わりやすい構成向け。'],
+    ['SNS投稿','短く印象に残る見せ方向け。'],
+    ['広告用','印象と情報整理を両立したい時向け。'],
+    ['YouTube用','少し長めでも説明を入れやすい。'],
+    ['その他','上記以外の用途。']
+  ],
+  appeal:[
+    ['新装開店','日付・時間を印象的に見せたい時向け。'],
+    ['景品入荷','商品の魅力や入荷感を伝えたい時向け。'],
+    ['来店案内','来店予定やイベント情報を分かりやすく見せる。'],
+    ['商品訴求','商品そのものを主役にしたい時向け。'],
+    ['ロゴ訴求','店名やロゴの印象づけを重視。'],
+    ['世界観訴求','雰囲気や空気感を大事にしたい時向け。'],
+    ['キャンペーン告知','期間や特典を整理して見せる。']
+  ],
+  size:[
+    ['横 16:9','店内モニター、横型ディスプレイ、YouTube向け。'],
+    ['縦 9:16','スマホ視聴、ストーリー、縦型サイネージ向け。'],
+    ['正方形 1:1','SNS投稿や一覧表示向け。']
+  ],
+  duration:[
+    ['5秒','一言訴求やロゴ表示向け。情報量は少なめ。'],
+    ['8秒','店内販促で使いやすい標準。'],
+    ['10秒','見出し、日付、時間、締めまで入れやすい。'],
+    ['15秒','少し流れを持たせたい時向け。'],
+    ['30秒','説明量が多い動画向け。']
+  ],
+  mood:[
+    ['映画予告風','暗め背景と強い文字演出で印象的に見せる。'],
+    ['高級感','落ち着いた色味、光沢、反射表現を活かす。'],
+    ['スタイリッシュ','シャープで洗練された印象。'],
+    ['シンプル告知','内容を分かりやすく見せる。'],
+    ['温かみ','やさしい光と柔らかい印象。'],
+    ['インパクト重視','短時間で強く印象を残す。']
+  ],
+  material:[
+    ['静止画あり','既存画像を最後に見せる構成などに向いている。'],
+    ['ロゴあり','店名やブランド印象を活かしたい時向け。'],
+    ['商品画像あり','商品そのものを見せたい時向け。'],
+    ['背景画像あり','世界観を見せたい時向け。'],
+    ['素材なし','文字と演出だけで組みたい時向け。'],
+    ['安全寄り構成で作る','既存素材を極力加工せず、新規演出中心。']
+  ],
+  recommendedFlow:[
+    ['導入演出 → 見出し → 日付 → 締め','新装開店や来店案内など日時をしっかり伝えたい時向け。'],
+    ['ロゴ → 告知 → 締め','ロゴや店舗印象を活かしたい時向け。'],
+    ['背景演出 → 文章訴求 → 最後に静止画','前半は新規演出、最後に既存画像を見せたい時向け。'],
+    ['文章を順番に強く見せて最後にまとめる','短い動画でインパクトを出したい時向け。'],
+    ['シンプルな1画面中心','情報をすっきり見せたい時向け。']
+  ]
+};
+
+function renderSteps(){
+  const el = document.getElementById('stepsList');
+  el.innerHTML = '';
+  steps.forEach((s,i)=>{
+    const div = document.createElement('div');
+    div.className = 'stepitem' + (i===current?' active':'') + (i<current?' done':'');
+    div.textContent = `${i+1}. ${s.label}`;
+    el.appendChild(div);
+  });
+  document.getElementById('progressText').textContent = `Step ${current+1} / ${steps.length}`;
+  document.getElementById('bar').style.width = `${((current+1)/steps.length)*100}%`;
+}
+
+function cardOptions(list, selected, onClick){
+  const wrap = document.createElement('div'); wrap.className='options';
+  list.forEach(([label,desc])=>{
+    const div = document.createElement('div');
+    div.className = 'option' + (selected===label?' selected':'');
+    div.innerHTML = `<div class="label">${label}</div><div class="desc">${desc}</div>`;
+    div.onclick = ()=>onClick(label);
+    wrap.appendChild(div);
+  });
+  return wrap;
+}
+
+function render(){
+  renderSteps();
+  const app = document.getElementById('app');
+  app.innerHTML='';
+  const stepId = steps[current].id;
+  if(stepId==='purpose') renderPurpose(app);
+  if(stepId==='appeal') renderAppeal(app);
+  if(stepId==='size') renderSize(app);
+  if(stepId==='duration') renderDuration(app);
+  if(stepId==='mood') renderMood(app);
+  if(stepId==='material') renderMaterial(app);
+  if(stepId==='flow') renderFlow(app);
+  if(stepId==='texts') renderTexts(app);
+  if(stepId==='summary') renderSummary(app);
+  if(stepId==='output') renderOutput(app);
+  document.getElementById('prevBtn').style.visibility = current===0 ? 'hidden' : 'visible';
+  document.getElementById('nextBtn').style.visibility = current===steps.length-1 ? 'hidden' : 'visible';
+}
+
+function titleBlock(app, title, desc){
+  const h2 = document.createElement('h2'); h2.textContent = title;
+  const p = document.createElement('p'); p.className='muted'; p.textContent = desc;
+  app.appendChild(h2); app.appendChild(p);
+}
+
+function renderPurpose(app){
+  titleBlock(app,'この動画は何に使いますか？','用途によって、向いているサイズや長さ、見せ方が変わります。');
+  app.appendChild(cardOptions(optionSets.purpose, state.purpose, v=>{state.purpose=v; render();}));
+}
+function renderAppeal(app){ titleBlock(app,'この動画で一番伝えたいことは何ですか？','動画の中心になる内容を選んでください。'); app.appendChild(cardOptions(optionSets.appeal, state.appeal, v=>{state.appeal=v; render();})); }
+function renderSize(app){ titleBlock(app,'動画サイズを選んでください','使用する場所に合ったサイズを選んでください。'); app.appendChild(cardOptions(optionSets.size, state.size, v=>{state.size=v; render();})); }
+function renderDuration(app){ titleBlock(app,'動画の長さを選んでください','長さによって、入れられる情報量と向いている販促が変わります。'); app.appendChild(cardOptions(optionSets.duration, state.duration, v=>{state.duration=v; render();})); }
+function renderMood(app){ titleBlock(app,'動画の雰囲気を選んでください','完成イメージに近いものを選んでください。'); app.appendChild(cardOptions(optionSets.mood, state.mood, v=>{state.mood=v; render();})); }
+function renderMaterial(app){ titleBlock(app,'使う素材を選んでください','選んだ内容に応じて、後半の考え方が変わります。'); app.appendChild(cardOptions(optionSets.material, state.material, v=>{state.material=v; render();})); }
+
+function renderFlow(app){
+  titleBlock(app,'動画の流れをどう決めますか？','選択式で決めるか、自由度の高いカスタム構成で決めるかを選んでください。');
+  app.appendChild(cardOptions([
+    ['おすすめ構成から選ぶ','動画の作り方がまだ固まっていない方や、迷わず進めたい方に向いています。'],
+    ['カスタム構成で進める','すでにある程度イメージがある方に向いています。']
+  ], state.flowMode, v=>{state.flowMode=v; render();}));
+
+  if(state.flowMode==='おすすめ構成から選ぶ'){
+    const h3 = document.createElement('h3'); h3.textContent='おすすめの動画構成を選んでください'; app.appendChild(h3);
+    app.appendChild(cardOptions(optionSets.recommendedFlow, state.recommendedFlow, v=>{state.recommendedFlow=v; render();}));
+  }
+
+  if(state.flowMode==='カスタム構成で進める'){
+    const h3 = document.createElement('h3'); h3.textContent='動画の流れはどのくらい決まっていますか？'; app.appendChild(h3);
+    app.appendChild(cardOptions([
+      ['ほぼ全部決まっている','見せる順番や流れまで、かなり具体的に決まっている方向けです。'],
+      ['あらかた決まっている','大まかな流れはあるが、細かい整理をしながら決めたい方向けです。'],
+      ['ぼんやり決まっている','雰囲気や方向性はあるが、流れはこれから固めたい方向けです。']
+    ], state.customDepth, v=>{state.customDepth=v; render();}));
+
+    if(state.customDepth==='ほぼ全部決まっている'){
+      const wrap = document.createElement('div'); wrap.className='field';
+      wrap.innerHTML = `<label class="label">考えている動画の流れ</label><textarea id="customFlowText" placeholder="例：\n・最初に黒背景から光を入れる\n・次に『新装開店！』を大きく表示する\n・その後に『3月23日（月）』を表示する\n・最後に静止画POPを全面表示する">${state.customFlowText||''}</textarea><div class="small">箇条書きで大丈夫です。まず何を見せるか、最後に何で締めるかが分かるように書くと整理しやすくなります。</div>`;
+      app.appendChild(wrap);
+      setTimeout(()=>{
+        document.getElementById('customFlowText').oninput = e=> state.customFlowText = e.target.value;
+      },0);
+    }
+
+    if(state.customDepth==='あらかた決まっている'){
+      const box = document.createElement('div'); box.className='field';
+      box.innerHTML = `
+        <h3>大まかな流れを整理してください</h3>
+        <div class="row">
+          <div><div class="label">最初に何を見せたいですか？</div><select id="startPart"><option value="">選択してください</option><option>ロゴ</option><option>文章</option><option>背景演出</option><option>静止画</option><option>その他</option></select></div>
+          <div><div class="label">最後に何で締めたいですか？</div><select id="endPart"><option value="">選択してください</option><option>静止画で締める</option><option>ロゴで締める</option><option>文章で締める</option><option>フェードアウトで終える</option><option>その他</option></select></div>
+        </div>
+        <div class="field"><div class="label">途中で何を見せたいですか？（複数可）</div><div class="chips" id="middleChips"></div></div>
+        <div class="field"><div class="label">特に強く見せたいのはどこですか？</div><select id="emphasis"><option value="">選択してください</option><option>最初</option><option>真ん中</option><option>最後</option></select></div>
+        <div class="small">大まかな流れが決まっていれば十分です。細かい順番や演出は、このあと整理されます。</div>
+      `;
+      app.appendChild(box);
+      const mids = ['文章を順番に見せる','日付や時間を見せる','ロゴを入れる','画像を入れる','背景演出を続ける','その他'];
+      setTimeout(()=>{
+        document.getElementById('startPart').value = state.customMid.start || '';
+        document.getElementById('endPart').value = state.customMid.end || '';
+        document.getElementById('emphasis').value = state.customMid.emphasis || '';
+        document.getElementById('startPart').onchange = e=> state.customMid.start = e.target.value;
+        document.getElementById('endPart').onchange = e=> state.customMid.end = e.target.value;
+        document.getElementById('emphasis').onchange = e=> state.customMid.emphasis = e.target.value;
+        const wrap = document.getElementById('middleChips'); wrap.innerHTML='';
+        mids.forEach(m=>{
+          const c = document.createElement('div'); c.className = 'chip' + (state.customMid.middle.includes(m)?' selected':''); c.textContent = m;
+          c.onclick = ()=>{ const arr=state.customMid.middle; const i=arr.indexOf(m); if(i>=0) arr.splice(i,1); else arr.push(m); render(); };
+          wrap.appendChild(c);
+        });
+      },0);
+    }
+
+    if(state.customDepth==='ぼんやり決まっている'){
+      const box = document.createElement('div'); box.className='field';
+      box.innerHTML = `
+        <h3>重視したいポイントを選んでください</h3>
+        <div class="row3">
+          <div><div class="label">一番目立たせたいもの</div><select id="focus"><option value="">選択してください</option><option>見出し</option><option>日付</option><option>時間</option><option>ロゴ</option><option>画像</option><option>雰囲気</option></select></div>
+          <div><div class="label">動画の印象</div><select id="impression"><option value="">選択してください</option><option>インパクト重視</option><option>分かりやすさ重視</option><option>高級感重視</option><option>スピード感重視</option><option>落ち着き重視</option></select></div>
+          <div><div class="label">最後の見せ方</div><select id="ending"><option value="">選択してください</option><option>しっかり締めたい</option><option>余韻を残したい</option><option>情報を見せて終わりたい</option><option>画像で止めたい</option></select></div>
+        </div>
+        <div class="small" style="margin-top:10px">ここで選んだ内容をもとに、動画の流れを組み立てます。迷っている場合でも進めやすい構成です。</div>`;
+      app.appendChild(box);
+      setTimeout(()=>{
+        ['focus','impression','ending'].forEach(id=> document.getElementById(id).value = state.customLight[id==='focus'?'focus':id==='impression'?'impression':'ending'] || '');
+        document.getElementById('focus').onchange = e=> state.customLight.focus = e.target.value;
+        document.getElementById('impression').onchange = e=> state.customLight.impression = e.target.value;
+        document.getElementById('ending').onchange = e=> state.customLight.ending = e.target.value;
+      },0);
+    }
+  }
+}
+
+function renderTexts(app){
+  titleBlock(app,'この動画で順番に見せたい文章はいくつありますか？','選んだ数に応じて、入力欄が表示されます。');
+  app.appendChild(cardOptions([
+    ['1個','もっともシンプルな訴求向け。'],['2個','見出し＋日付などに向いています。'],['3個','新装開店＋日付＋時間などに向いています。'],['4個','補足込みで整理したい時向け。'],['5個以上','情報量が多い時向け。']
+  ], `${state.textCount}個`, v=>{state.textCount = parseInt(v); syncTextBlocks(); render();}));
+  const h3 = document.createElement('h3'); h3.textContent='動画で動かしたい文章を入力してください'; app.appendChild(h3);
+  const p = document.createElement('p'); p.className='muted'; p.textContent='見せたい順番に沿って入力してください。もっとも目立たせたい文章を先に入れると整理しやすくなります。'; app.appendChild(p);
+  for(let i=0;i<state.textCount;i++){
+    const b = document.createElement('div'); b.className='field card'; b.style.padding='16px'; b.style.background='#0b1220';
+    b.innerHTML = `
+      <div class="label">文章ブロック${i+1}</div>
+      <input type="text" id="text_${i}" placeholder="例：${i===0?'新装開店！':i===1?'3月23日（月）':i===2?'10:00 OPEN!（予定）':'補足文'}" value="${escapeHtml(state.textBlocks[i]?.text || '')}">
+      <div class="field"><div class="label">見せ方（任意）</div><select id="style_${i}"><option value="">指定なし</option><option>強く見せる</option><option>ゆっくり見せる</option><option>小さく添える</option><option>一瞬だけ出す</option><option>最後に大きく見せる</option></select></div>`;
+    app.appendChild(b);
+    setTimeout(()=>{
+      document.getElementById(`text_${i}`).oninput = e=> state.textBlocks[i].text = e.target.value;
+      document.getElementById(`style_${i}`).value = state.textBlocks[i].style || '';
+      document.getElementById(`style_${i}`).onchange = e=> state.textBlocks[i].style = e.target.value;
+    },0);
+  }
+}
+
+function renderSummary(app){
+  titleBlock(app,'内容を確認してください','ここまでに選んだ内容をもとに、作りたい動画の概要をまとめています。');
+  const sum = document.createElement('div'); sum.className='summary';
+  const items = [
+    ['用途',state.purpose],['訴求内容',state.appeal],['動画サイズ',state.size],['動画の長さ',state.duration],['雰囲気',state.mood],['使用素材',state.material],['流れの決め方',state.flowMode],
+    ['構成',getFlowSummary()],['動かしたい文章',state.textBlocks.slice(0,state.textCount).map((b,i)=>`${i+1}. ${b.text || '未入力'}${b.style?`（${b.style}）`:''}`).join('\n')],['想定クレジット帯',estimateCredits()]
+  ];
+  items.forEach(([k,v])=>{ const d=document.createElement('div'); d.className='item'; d.innerHTML=`<div class="label">${k}</div><div class="pre">${v || '未選択'}</div>`; sum.appendChild(d); });
+  app.appendChild(sum);
+}
+
+function renderOutput(app){
+  titleBlock(app,'プロンプトが完成しました','以下は、これまでの内容をもとに整理したSora用の文章です。そのままコピーして使用できます。');
+  const prompt = buildPrompt();
+  const review = buildReviewPrompt(prompt);
+  app.innerHTML += `
+    <h3>① 完成プロンプト</h3>
+    <div class="pre" id="promptBox">${escapeHtml(prompt)}</div>
+    <div class="inline" style="margin-top:10px"><button class="btn" id="copyPrompt">完成プロンプトをコピー</button></div>
+    <h3>② GPT / Claude 用レビュー依頼文</h3>
+    <div class="pre" id="reviewBox">${escapeHtml(review)}</div>
+    <div class="inline" style="margin-top:10px"><button class="btn" id="copyReview">レビュー依頼文をコピー</button></div>
+    <p class="small warn" style="margin-top:16px">※ 現段階はテスト用です。Soraへ投げる前に、GPTやClaudeで破綻・曖昧さ・情報量の過不足を確認する想定です。</p>
+  `;
+  setTimeout(()=>{
+    document.getElementById('copyPrompt').onclick = ()=>copyText(prompt,'完成プロンプトをコピーしました');
+    document.getElementById('copyReview').onclick = ()=>copyText(review,'レビュー依頼文をコピーしました');
+  },0);
+}
+
+function getFlowSummary(){
+  if(state.flowMode==='おすすめ構成から選ぶ') return state.recommendedFlow;
+  if(state.flowMode==='カスタム構成で進める'){
+    if(state.customDepth==='ほぼ全部決まっている') return state.customFlowText || '未入力';
+    if(state.customDepth==='あらかた決まっている') return `最初: ${state.customMid.start || '未設定'} / 途中: ${state.customMid.middle.join('、') || '未設定'} / 最後: ${state.customMid.end || '未設定'} / 強調: ${state.customMid.emphasis || '未設定'}`;
+    if(state.customDepth==='ぼんやり決まっている') return `主役: ${state.customLight.focus || '未設定'} / 印象: ${state.customLight.impression || '未設定'} / 終わり方: ${state.customLight.ending || '未設定'}`;
+  }
+  return '';
+}
+
+function estimateCredits(){
+  const map = {'5秒':'低め','8秒':'低〜中','10秒':'中','15秒':'中〜やや高','30秒':'高め'};
+  return map[state.duration] || '未算出';
+}
+
+function buildPrompt(){
+  const texts = state.textBlocks.slice(0,state.textCount).filter(b=>b.text.trim()).map((b,i)=>`・文章${i+1}:「${b.text}」${b.style?`（${b.style}）`:''}`).join('\n');
+  return `動画生成AI用プロンプト
+
+用途: ${state.purpose}
+主な訴求内容: ${state.appeal}
+動画サイズ: ${state.size}
+動画の長さ: ${state.duration}
+雰囲気: ${state.mood}
+使用素材: ${state.material}
+動画構成: ${getFlowSummary()}
+想定クレジット帯: ${estimateCredits()}
+
+この動画は${state.purpose}向けで、${state.appeal}を中心に伝える構成にする。${state.size}で、${state.duration}の尺に収める。全体の雰囲気は${state.mood}。素材は${state.material}を前提とする。
+
+見せたい文章は以下の順番で表示する。
+${texts || '・文章未入力'}
+
+映像としては、冒頭で内容に合った導入を入れ、その後に訴求文章を順番に見せ、最後は内容がしっかり伝わる締め方にする。被写体、動き、カメラワーク、雰囲気、ライティング、背景、時間帯、スタイルが映像として自然につながるように整理する。静止画やロゴがある場合は不自然な加工を避け、動画として成立するように新規演出で補完する。必要に応じてズーム、パン、発光、フェード、粒子感、反射光などを使い、静止画感を減らして奥行きを出す。
+
+出力は以下の形式で整理すること。
+① 完成プロンプト
+② シーン構成
+③ 演出・カメラ指示
+④ カスタマイズ案
+⑤ 画像の使い方`;
+}
+
+function buildReviewPrompt(prompt){
+  return `この動画生成AI向けプロンプトを確認してください。以下の観点でチェックしてください。\n1. 指示の矛盾や不足はないか\n2. 映像として不自然な箇所はないか\n3. 秒数に対して情報量は適切か\n4. 曖昧で解釈が分かれそうな表現はないか\n5. 想定と違う動画になるリスクがある箇所はないか\n6. 修正した方がよい表現があれば具体的に示してください\n\n確認対象プロンプト:\n\n${prompt}`;
+}
+
+function syncTextBlocks(){ while(state.textBlocks.length < state.textCount) state.textBlocks.push({text:'',style:''}); }
+function escapeHtml(str){ return String(str).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m])); }
+function copyText(text,msg){ navigator.clipboard.writeText(text).then(()=>alert(msg)); }
+
+function validateCurrent(){
+  const id = steps[current].id;
+  if(id==='purpose') return !!state.purpose;
+  if(id==='appeal') return !!state.appeal;
+  if(id==='size') return !!state.size;
+  if(id==='duration') return !!state.duration;
+  if(id==='mood') return !!state.mood;
+  if(id==='material') return !!state.material;
+  if(id==='flow'){
+    if(!state.flowMode) return false;
+    if(state.flowMode==='おすすめ構成から選ぶ') return !!state.recommendedFlow;
+    if(state.flowMode==='カスタム構成で進める'){
+      if(!state.customDepth) return false;
+      if(state.customDepth==='ほぼ全部決まっている') return !!state.customFlowText.trim();
+      if(state.customDepth==='あらかた決まっている') return !!state.customMid.start && !!state.customMid.end && !!state.customMid.emphasis;
+      if(state.customDepth==='ぼんやり決まっている') return !!state.customLight.focus && !!state.customLight.impression && !!state.customLight.ending;
+    }
+  }
+  if(id==='texts') return state.textBlocks.slice(0,state.textCount).every(b=>b.text.trim());
+  return true;
+}
+
+document.getElementById('nextBtn').onclick = ()=>{
+  if(!validateCurrent()) return alert('未入力または未選択の項目があります。');
+  if(current < steps.length-1){ current++; render(); }
+};
+document.getElementById('prevBtn').onclick = ()=>{ if(current>0){ current--; render(); } };
+document.getElementById('resetBtn').onclick = ()=>{ if(confirm('入力内容をリセットしますか？')) location.reload(); };
+
+render();
+</script>
+</body>
+</html>
